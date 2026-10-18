@@ -1,0 +1,120 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Fallen Oasis map editor – Rooms-first</title><style>*{box-sizing:border-box}body{margin:0;background:#070d18;color:#e8f1ff;font:15px/1.4 system-ui,sans-serif;-webkit-tap-highlight-color:transparent}
+header{display:flex;align-items:center;gap:8px;padding:10px 12px;background:#0b1626;border-bottom:1px solid #1d3a5a;position:sticky;top:0;z-index:5}
+.logo{font-weight:800;letter-spacing:.08em;color:#00e5ff;font-size:13px}.sp{flex:1}
+button,select,input{font:inherit;color:#fff;background:#12202f;border:1px solid #27425f;border-radius:12px;min-height:44px;padding:0 12px}
+button{cursor:pointer}button.primary{background:#00a8c4;border-color:#00e5ff;font-weight:700}button.danger{border-color:#ff3b5c;color:#ff8da0}button:disabled{opacity:.45}
+button.on{outline:2px solid #ffb300}
+.demo{background:#2a2108;color:#ffd36b;font-size:12px;padding:6px 12px;text-align:center}
+.steps{display:flex;gap:6px;padding:8px 12px;overflow-x:auto}.steps button{white-space:nowrap;min-height:40px;font-size:13px}.steps button.cur{background:#00a8c4;border-color:#00e5ff}
+main{display:flex;flex-direction:column;gap:10px;padding:0 12px 90px;max-width:1100px;margin:auto}
+@media(min-width:860px){main.two{flex-direction:row}main.two .side{width:340px}}
+#stage{flex:1;background:#0a1220;border:1px solid #1d3a5a;border-radius:14px;overflow:hidden;position:relative;min-height:200px}
+svg{width:100%;height:auto;display:block;touch-action:none;user-select:none}
+.side{background:#0c1829;border:1px solid #1d3a5a;border-radius:14px;padding:12px}
+.side h3{margin:0 0 8px;font-size:16px}.hint{color:#8fa8c4;font-size:13px;margin:4px 0 8px}
+.row{display:flex;gap:8px;align-items:center;margin:6px 0;flex-wrap:wrap}.row input,.row select{flex:1;min-width:0}
+.card{background:#101f33;border:1px solid #27425f;border-radius:12px;padding:10px;margin:8px 0}
+.chip{display:inline-block;background:#16304d;border-radius:99px;padding:4px 10px;font-size:12px;margin:2px}
+.toolbar{position:fixed;bottom:0;left:0;right:0;background:#0b1626;border-top:1px solid #1d3a5a;padding:8px 12px;display:flex;gap:8px;z-index:6;flex-wrap:wrap}
+.pill{font-size:12px;padding:4px 8px;border-radius:99px}.pill.saved{background:#0d3a22;color:#7dffb0}.pill.unsaved{background:#4a2a08;color:#ffc36b}
+.modal{position:fixed;inset:0;background:#000b;display:none;align-items:center;justify-content:center;z-index:20;padding:16px}.modal.show{display:flex}
+.box{background:#0a1220;border:1px solid #00e5ff;border-radius:16px;padding:18px;max-width:560px;width:100%;max-height:90vh;overflow:auto}
+.qrs{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.qc{background:#fff;color:#000;border-radius:10px;padding:8px;text-align:center;font-size:12px}.qc svg{width:100%;max-width:120px}
+@media print{body *{visibility:hidden}.box,.box *{visibility:visible}.box{position:absolute;inset:0;border:0;background:#fff}.noprint{display:none!important}}
+</style></head><body data-mode="rooms">
+<header><a href="index.html" style="color:#8fa8c4;text-decoration:none">←</a><span class="logo">FALLEN OASIS · MAP EDITOR</span><span class="sp"></span><span id="pill" class="pill"></span><button class="primary" id="savebtn" style="min-height:40px">Save</button></header>
+<div class="demo">Demo Rooms-first: Start with the rooms, then add tasks to each. Nothing leaves your device.</div><nav class="steps" id="steps"></nav>
+<main class="two"><div id="stage"><svg viewBox="0 0 400 260"></svg><div id="hint0" style="display:none;position:absolute;inset:0;padding:30% 10%;text-align:center;color:#8fa8c4;pointer-events:none">Nothing here yet. Use the controls to add your first place.</div><div id="toast" style="position:absolute;bottom:8px;left:50%;transform:translateX(-50%);background:#000c;padding:6px 12px;border-radius:99px;opacity:0;transition:.3s;pointer-events:none"></div></div><aside class="side" id="panel"></aside></main>
+<div class="toolbar"><button id="undo">↶ Undo</button><button id="redo">↷ Redo</button><span class="sp"></span><button id="reset" style="min-height:40px;font-size:12px">Reset demo</button></div>
+<div class="modal" id="modal"><div class="box" id="mbody"></div></div><script>const MODE=document.body.dataset.mode;
+const TASKS=[['start-reactor','Start the reactor'],['fuel-engines','Fuel the engines'],['unlock-manifolds','Unlock the manifolds'],['stabilize-steering','Stabilize the steering'],['chart-course','Chart the course'],['water-plants','Water the plants'],['checkin','Crew check-in (generic)'],['puzzle','Team puzzle (generic)'],['supply','Supply check (generic)'],['hold','Hold position (generic)']];
+const tname=id=>(TASKS.find(t=>t[0]===id)||[0,id])[1];
+const COL=['#00e5ff','#ff2bd6','#ffb300','#39ff88','#9d7bff','#ff7a45','#c6ff3d'];
+const PLACES=['Main gathering place','Airlock','Engine bay','Hydroponics bay','Crew quarters','Command deck','Cargo hold'];
+const W=400,H=260,KEY='fo-mock-'+MODE;
+const DEF={rooms:{areas:[{id:1,name:'Main gathering place',x:20,y:20,w:170,h:110,c:COL[0]},{id:2,name:'Engine bay',x:200,y:20,w:110,h:110,c:COL[2]}],stations:[]},
+zones:{areas:[{id:1,name:'Main gathering place',kind:'Gathering place',x:20,y:20,w:180,h:120,c:COL[0]}],stations:[]},
+stations:{areas:[],stations:[{id:1,name:'Reactor console',task:'start-reactor',place:'Engine bay',x:null,y:null},{id:2,name:'Fuel dock',task:'fuel-engines',place:'Cargo hold',x:null,y:null}]}};
+let S=JSON.parse(localStorage.getItem(KEY)||'null')||JSON.parse(JSON.stringify(DEF[MODE]));S.next=S.next||100;
+const STEPS={rooms:['1 · Rooms','2 · Tasks per room','3 · Print & save'],zones:['1 · Paint zones','2 · Place stations','3 · Print & save'],stations:['1 · Stations','2 · Place on map','3 · Print & save']}[MODE];
+let step=0,sel=null,hist=[],redo=[],saved=true,brush='Gathering place',placing=null,drag=null;
+const $=s=>document.querySelector(s),esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const id=()=>S.next++;
+function code(){const A='ABCDEFGHJKLMNPRSTUVWXYZ';return Array.from({length:4},()=>A[Math.random()*A.length|0]).join('')}
+function snapshot(){hist.push(JSON.stringify(S));if(hist.length>30)hist.shift();redo=[];mark(false)}
+function mark(v){saved=v;const p=$('#pill');p.className='pill '+(v?'saved':'unsaved');p.textContent=v?'✓ Saved':'● Unsaved';}
+function toast(t){const e=$('#toast');e.textContent=t;e.style.opacity=1;setTimeout(()=>e.style.opacity=0,1700)}
+function pt(e){const r=$('svg').getBoundingClientRect();return{x:(e.clientX-r.left)/r.width*W,y:(e.clientY-r.top)/r.height*H}}
+const cl=(v,a,b)=>Math.max(a,Math.min(b,v));
+function areaAt(x,y){return [...S.areas].reverse().find(a=>x>=a.x&&x<=a.x+a.w&&y>=a.y&&y<=a.y+a.h)}
+function placeOf(s){if(MODE==='stations')return s.place||'—';if(MODE==='rooms'){const a=S.areas.find(a=>a.id===s.area);return a?a.name:'—'}const a=s.x!=null&&areaAt(s.x,s.y);return a?a.name:'Outside any zone'}
+function drawMap(){let h=`<defs><pattern id="g" width="20" height="20" patternUnits="userSpaceOnUse"><path d="M20 0H0V20" fill="none" stroke="#12304a"/></pattern></defs><rect width="${W}" height="${H}" fill="url(#g)"/>`;
+S.areas.forEach(a=>{const s=sel===a.id;h+=`<g data-a="${a.id}"><rect x="${a.x}" y="${a.y}" width="${a.w}" height="${a.h}" rx="8" fill="${a.c}30" stroke="${a.c}" stroke-width="${s?4:2}" ${MODE==='zones'?'stroke-dasharray="7 5"':''}/><text x="${a.x+8}" y="${a.y+18}" fill="#fff" font-size="12" font-weight="700">${esc(a.name)}</text>${s&&step===0?`<circle data-rs="${a.id}" cx="${a.x+a.w}" cy="${a.y+a.h}" r="11" fill="#fff" stroke="${a.c}" stroke-width="3"/>`:''}</g>`});
+S.stations.forEach(s=>{if(s.x==null)return;const c=sel===s.id;h+=`<g data-s="${s.id}"><circle cx="${s.x}" cy="${s.y}" r="${c?13:10}" fill="#ffb300" stroke="#fff" stroke-width="${c?3:1.5}"/><text x="${s.x}" y="${s.y+4}" text-anchor="middle" font-size="11" font-weight="800" fill="#000">★</text></g>`});
+$('svg').innerHTML=h;
+if(!S.areas.length&&MODE!=='stations'&&step===0)$('#hint0').style.display='block';else $('#hint0').style.display='none'}
+function taskOpts(v){return TASKS.map(t=>`<option value="${t[0]}" ${t[0]===v?'selected':''}>${t[1]}</option>`).join('')}
+function panel(){const P=$('#panel');let h='';
+const selA=S.areas.find(a=>a.id===sel),selS=S.stations.find(s=>s.id===sel);
+if(step===2){const n=S.stations.length;h=`<h3>Print & save</h3><p class="hint">${S.areas.length} ${MODE==='zones'?'zones':'places'} · ${n} station${n==1?'':'s'}. Each station gets a QR card. Stick it up where the station is.</p><div class="row"><button class="primary" id="prev">Preview QR cards</button></div><div class="row"><button class="primary" id="save2">💾 Save map</button></div>`}
+else if(MODE==='rooms'&&step===0){h=`<h3>Rooms</h3><p class="hint">Add a room, drag it into place, drag the white dot to resize.</p><div class="row"><button class="primary" id="add">＋ Add room</button></div>`;
+S.areas.forEach(a=>h+=`<div class="card" style="border-color:${a.id===sel?a.c:''}"><div class="row"><input data-ren="${a.id}" value="${esc(a.name)}" aria-label="Room name"><button class="danger" data-del="${a.id}">🗑</button></div><div class="row">${COL.map(c=>`<button data-col="${a.id}|${c}" style="background:${c};min-height:30px;width:30px;padding:0"></button>`).join('')}</div></div>`)}
+else if(MODE==='rooms'&&step===1){h=`<h3>Tasks per room</h3><p class="hint">Pick a task for each room. A station appears on the map; drag it to fine-tune.</p>`;
+if(!S.areas.length)h+=`<p class="hint">Add a room first (step 1).</p>`;
+S.areas.forEach(a=>{h+=`<div class="card"><b style="color:${a.c}">${esc(a.name)}</b>`;S.stations.filter(s=>s.area===a.id).forEach(s=>h+=`<div class="row"><span class="chip" style="flex:1">★ ${esc(tname(s.task))}</span><button class="danger" data-delst="${s.id}">✕</button></div>`);
+h+=`<div class="row"><select id="t${a.id}">${taskOpts()}</select><button class="primary" data-addst="${a.id}">＋</button></div></div>`})}
+else if(MODE==='zones'&&step===0){h=`<h3>Paint zones</h3><p class="hint">Choose a zone type, then <b>drag on the floor plan</b> to paint it. Tap a zone to select, move or rename it.</p><div class="row">${['Gathering place','Task area','Quiet area','Off-limits'].map(k=>`<button data-brush="${k}" class="${brush===k?'on':''}">${k}</button>`).join('')}</div>`;
+if(selA)h+=`<div class="card"><div class="row"><input data-ren="${selA.id}" value="${esc(selA.name)}"><button class="danger" data-del="${selA.id}">🗑</button></div><p class="hint">${selA.kind||''} · drag zone to move, white dot to resize</p></div>`;
+h+=`<p class="hint">${S.areas.length} zone(s) painted.</p>`}
+else if(MODE==='zones'&&step===1){h=`<h3>Place stations</h3><p class="hint">Pick a task, then tap the floor plan. Zones are detected automatically.</p><div class="row"><select id="tsel">${taskOpts()}</select><button class="primary" id="arm">${placing?'Tap map…':'Place'}</button></div>`;
+S.stations.forEach(s=>h+=`<div class="card"><div class="row"><span style="flex:1">★ ${esc(tname(s.task))}<br><span class="hint">${esc(placeOf(s))}</span></span><button class="danger" data-delst="${s.id}">✕</button></div></div>`)}
+else if(MODE==='stations'&&step===0){h=`<h3>Stations</h3><p class="hint">List the task stations first. You can place them later.</p><div class="row"><select id="tsel">${taskOpts()}</select><button class="primary" id="addst">＋ Add</button></div>`;
+S.stations.forEach(s=>h+=`<div class="card"><div class="row"><input data-sname="${s.id}" value="${esc(s.name)}"><button class="danger" data-delst="${s.id}">🗑</button></div><div class="row"><select data-stask="${s.id}">${taskOpts(s.task)}</select></div><div class="row"><select data-splace="${s.id}">${PLACES.map(p=>`<option ${p===s.place?'selected':''}>${p}</option>`).join('')}</select></div></div>`)}
+else if(MODE==='stations'&&step===1){h=`<h3>Place on map</h3><p class="hint">Tap a station, then tap the map to drop it. Drag to move.</p>`;
+S.stations.forEach(s=>h+=`<div class="card"><div class="row"><button data-pick="${s.id}" class="${placing===s.id?'on':''}" style="flex:1;text-align:left">★ ${esc(s.name)} <span class="hint">${s.x==null?'not placed':'placed'}</span></button></div></div>`)}
+P.innerHTML=h;
+const on=(s,f)=>P.querySelectorAll(s).forEach(f);
+$('#add')&&($('#add').onclick=()=>{snapshot();const n=S.areas.length;const a={id:id(),name:'New room '+(n+1),x:20+(n%3)*40,y:150+(n%2)*20,w:110,h:80,c:COL[n%COL.length]};S.areas.push(a);sel=a.id;refresh()});
+on('[data-ren]',e=>{e.oninput=()=>{const a=S.areas.find(a=>a.id==e.dataset.ren);a.name=e.value;mark(false);drawMap()};e.onchange=()=>snapshot()});
+on('[data-del]',e=>e.onclick=()=>{snapshot();const i=+e.dataset.del;S.areas=S.areas.filter(a=>a.id!==i);S.stations=S.stations.filter(s=>s.area!==i);sel=null;refresh()});
+on('[data-col]',e=>e.onclick=()=>{snapshot();const[i,c]=e.dataset.col.split('|');S.areas.find(a=>a.id==i).c=c;refresh()});
+on('[data-addst]',e=>e.onclick=()=>{snapshot();const a=S.areas.find(a=>a.id==e.dataset.addst);const k=S.stations.filter(s=>s.area===a.id).length;S.stations.push({id:id(),task:$('#t'+a.id).value,area:a.id,code:code(),x:a.x+30+k*28,y:a.y+a.h-22});refresh();toast('Station added')});
+on('[data-delst]',e=>e.onclick=()=>{snapshot();S.stations=S.stations.filter(s=>s.id!=e.dataset.delst);refresh()});
+on('[data-brush]',e=>e.onclick=()=>{brush=e.dataset.brush;refresh()});
+$('#arm')&&($('#arm').onclick=()=>{placing='new';panel()});
+$('#addst')&&($('#addst').onclick=()=>{snapshot();const t=$('#tsel').value;S.stations.push({id:id(),name:tname(t),task:t,place:PLACES[0],code:code(),x:null,y:null});refresh()});
+on('[data-sname]',e=>{e.oninput=()=>{S.stations.find(s=>s.id==e.dataset.sname).name=e.value;mark(false)};e.onchange=()=>snapshot()});
+on('[data-stask]',e=>e.onchange=()=>{snapshot();S.stations.find(s=>s.id==e.dataset.stask).task=e.value});
+on('[data-splace]',e=>e.onchange=()=>{snapshot();S.stations.find(s=>s.id==e.dataset.splace).place=e.value});
+on('[data-pick]',e=>e.onclick=()=>{placing=+e.dataset.pick;panel();toast('Now tap the map')});
+$('#prev')&&($('#prev').onclick=showQR);$('#save2')&&($('#save2').onclick=save)}
+function qr(c){let h=0;for(const ch of c)h=(h*31+ch.charCodeAt(0))>>>0;let r='';const N=17;let x=h||1;for(let i=0;i<N;i++)for(let j=0;j<N;j++){x^=x<<13;x>>>=0;x^=x>>>17;x^=x<<5;x>>>=0;const f=(i<5&&j<5)||(i<5&&j>N-6)||(i>N-6&&j<5);if(f?(i%4!=0&&j%4!=0&&(i<5&&j<5||1)?((i==2||j==2||i%4==0||j%4==0)?1:0):1):x&1)r+=`<rect x="${j}" y="${i}" width="1" height="1"/>`}return`<svg viewBox="0 0 17 17">${r}</svg>`}
+function showQR(){S.stations.forEach(s=>{if(!s.code)s.code=code()});$('#mbody').innerHTML=`<h3>Printable QR cards</h3><p class="hint">Demo codes only (not real scannable codes).</p><div class="qrs">${S.stations.map(s=>`<div class="qc">${qr(s.code)}<b>${esc(s.name||tname(s.task))}</b><br>${esc(tname(s.task))}<br>📍 ${esc(placeOf(s))}<br><code>${s.code}</code></div>`).join('')||'<p>No stations yet.</p>'}</div><div class="row noprint" style="margin-top:12px"><button class="primary" onclick="print()">🖨 Print</button><button onclick="closeM()">Close</button></div>`;$('#modal').classList.add('show')}
+function closeM(){$('#modal').classList.remove('show')}
+function save(){localStorage.setItem(KEY,JSON.stringify(S));mark(true);const un=S.stations.filter(s=>MODE!=='stations'?false:s.x==null).length;$('#mbody').innerHTML=`<h3>🚀 Map saved!</h3><p>Your venue is ready: ${MODE==="stations"?"":`<b>${S.areas.length}</b> ${MODE==="zones"?"zone(s)":"place(s)"} and `}<b>${S.stations.length}</b> task station(s).${un?`<br><span class="hint">${un} station(s) not yet placed on the map – that's fine.</span>`:''}</p><p class="hint">This is a demo: it's stored only on this device.</p><div class="row"><button class="primary" onclick="closeM()">Done</button><button onclick="showQR()">Preview QR cards</button></div>`;$('#modal').classList.add('show')}
+function refresh(){mark(saved&&false||saved);drawMap();panel()}
+function render(){$('#steps').innerHTML=STEPS.map((s,i)=>`<button class="${i===step?'cur':''}" data-st="${i}">${s}</button>`).join('');document.querySelectorAll('[data-st]').forEach(b=>b.onclick=()=>{step=+b.dataset.st;placing=null;render()});$('#stage').style.display=step===2?'none':'block';drawMap();panel()}
+// pointer interaction
+const svg=$('svg');
+svg.addEventListener('pointerdown',e=>{if(step===2)return;const p=pt(e),t=e.target.closest('[data-rs],[data-s],[data-a]');
+ if(placing&&MODE!=='rooms'&&!(t&&t.dataset.s)){snapshot();if(placing==='new'){S.stations.push({id:id(),name:tname($('#tsel').value),task:$('#tsel').value,code:code(),x:p.x,y:p.y});placing=null;toast('Station placed')}else{const s=S.stations.find(s=>s.id===placing);s.x=p.x;s.y=p.y;placing=null;toast('Placed')}refresh();return}
+ if(t&&t.dataset.rs&&step===0){snapshot();const a=S.areas.find(a=>a.id==t.dataset.rs);drag={k:'rs',a};svg.setPointerCapture(e.pointerId);return}
+ if(t&&t.dataset.s){const s=S.stations.find(s=>s.id==t.dataset.s);sel=s.id;snapshot();drag={k:'st',s,dx:p.x-s.x,dy:p.y-s.y};svg.setPointerCapture(e.pointerId);refresh();return}
+ if(t&&t.dataset.a&&step===0){const a=S.areas.find(a=>a.id==t.dataset.a);sel=a.id;snapshot();drag={k:'mv',a,dx:p.x-a.x,dy:p.y-a.y};svg.setPointerCapture(e.pointerId);refresh();return}
+ if(MODE==='zones'&&step===0){snapshot();const a={id:id(),name:brush+' '+(S.areas.length+1),kind:brush,x:p.x,y:p.y,w:1,h:1,c:{'Gathering place':COL[0],'Task area':COL[2],'Quiet area':COL[4],'Off-limits':'#ff3b5c'}[brush]};S.areas.push(a);sel=a.id;drag={k:'new',a,x0:p.x,y0:p.y};svg.setPointerCapture(e.pointerId);return}
+ sel=null;refresh()});
+svg.addEventListener('pointermove',e=>{if(!drag)return;const p=pt(e);
+ if(drag.k==='mv'){const a=drag.a;const nx=cl(Math.round(p.x-drag.dx),0,W-a.w),ny=cl(Math.round(p.y-drag.dy),0,H-a.h);const mx=nx-a.x,my=ny-a.y;a.x=nx;a.y=ny;S.stations.forEach(s=>{if(s.area===a.id){s.x+=mx;s.y+=my}})}
+ else if(drag.k==='rs'){drag.a.w=cl(Math.round(p.x-drag.a.x),40,W-drag.a.x);drag.a.h=cl(Math.round(p.y-drag.a.y),30,H-drag.a.y)}
+ else if(drag.k==='new'){const a=drag.a;a.x=cl(Math.min(p.x,drag.x0),0,W);a.y=cl(Math.min(p.y,drag.y0),0,H);a.w=Math.min(Math.abs(p.x-drag.x0),W-a.x);a.h=Math.min(Math.abs(p.y-drag.y0),H-a.y)}
+ else if(drag.k==='st'){drag.s.x=cl(p.x-drag.dx,8,W-8);drag.s.y=cl(p.y-drag.dy,8,H-8)}
+ mark(false);drawMap()});
+const up=()=>{if(!drag)return;if(drag.k==='new'&&(drag.a.w<25||drag.a.h<25)){S.areas=S.areas.filter(a=>a!==drag.a);sel=null;toast('Drag a bigger box')}drag=null;refresh()};
+svg.addEventListener('pointerup',up);svg.addEventListener('pointercancel',up);
+$('#undo').onclick=()=>{if(!hist.length)return;redo.push(JSON.stringify(S));S=JSON.parse(hist.pop());mark(false);sel=null;refresh()};
+$('#redo').onclick=()=>{if(!redo.length)return;hist.push(JSON.stringify(S));S=JSON.parse(redo.pop());mark(false);refresh()};
+$('#reset').onclick=()=>{if(confirm('Reset this demo to its starting layout?')){localStorage.removeItem(KEY);S=JSON.parse(JSON.stringify(DEF[MODE]));S.next=100;hist=[];sel=null;mark(true);render()}};
+$('#savebtn').onclick=save;$('#modal').onclick=e=>{if(e.target.id==='modal')closeM()};
+mark(true);render();
+</script></body></html>
